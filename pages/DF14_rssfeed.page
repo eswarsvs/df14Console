@@ -1,0 +1,182 @@
+<apex:page showHeader="false" standardStylesheets="true" controller="RSSFeedController">
+<style type="text/css">	
+
+	.feedInput {
+		width: 70%;
+	}
+
+	.feedList ul {
+		padding: 0 0 0 5px;
+	}
+	.feedList li {
+		list-style: none;
+		font-size: 16px;
+		border: 1px solid rgb(231,231,231);
+		border-radius: 4px;
+		margin: 0px;
+		margin-top: 3px;
+		padding-top: 4px;
+		background-color: rgb(245,245,245);
+	}
+	.feedList div {
+		display: inline-block;
+		cursor: pointer;
+	}
+	.feedLink {
+		color: #015ba7;
+		font-weight: bold;
+		font-size: 12px;
+		width: 85%;
+		height: 13px;
+		overflow: hidden;
+	}
+	.removeLink {
+		height: 15px;
+		width: 10%;
+		display: inline-block;
+		padding-left: 3px;
+		padding-bottom: 3px;
+	}
+</style>
+
+<apex:stylesheet value="//cdn.jsdelivr.net/webjars/bootstrap-sf1/0.1.0-beta.6/css/bootstrap-namespaced.css"/>
+<apex:includeScript value="//ajax.googleapis.com/ajax/libs/angularjs/1.3.0-beta.11/angular.min.js"/>
+<apex:includeScript value="/support/console/31.0/integration.js"/>
+
+<script type="text/javascript">
+
+	var App = angular.module('RSSFeedApp', []);
+
+	App.controller("FeedCtrl", ['$scope','$http','FeedService','SFDCFeedService', function ($scope,$http, FeedService,SFDCFeedService) {    
+		/*
+			Load the RSSFeed__c objects from SFDC that are owned by this user.
+			Limit of 20 is hardcoded in the controller. 
+		*/
+    	SFDCFeedService.getFeeds().then(function(result) {
+    		console.log(JSON.stringify(result));
+    		$scope.feeds = result.feeds;
+    	}, function(error) {
+    		console.log(error);
+    	});
+
+    	/*
+			Adds feed to the SFDC list, view model and opens feed details in new tab.
+    	*/
+    	$scope.addFeed = function(feedUrl) {
+    		console.log('find feed ['+feedUrl+']');
+    		FeedService.parseFeed(feedUrl).then(function(result) {
+    			Visualforce.remoting.Manager.invokeAction(
+    				'{!$RemoteAction.RSSFeedController.addFeed}',
+    				result.data.responseData.feed.title,
+    				result.data.responseData.feed.feedUrl,
+    				function(result, event) {
+    					console.log(JSON.stringify(result));
+    					if(event.status) {
+    						$scope.newUrl = '';
+    						length = $scope.feeds.push(result);
+    						$scope.$apply();
+    						$scope.openFeed(length-1);
+    					} else {
+    						console.log(event);
+    					}
+    				}
+    			);
+    		})
+    	}
+
+    	/*
+			removeFeed function used to remove a feed object first
+			from SFDC then from the view model $scope.feeds
+    	*/
+    	$scope.removeFeed = function(feedIndex) {
+    		var feed = $scope.feeds[feedIndex];
+    		Visualforce.remoting.Manager.invokeAction(
+    			'{!$RemoteAction.RSSFeedController.removeFeed}',
+    			feed.Id,
+    			function(result,event) {
+    				console.log(JSON.stringify(result));
+    				if(event.status) {
+    					sforce.console.closeTab(feed.subtabId);
+    					$scope.feeds.splice(feedIndex, 1);
+    					$scope.$apply();
+    				} else {
+    					console.log(event);
+    				}
+    			}	
+    		);
+    	}
+
+    	/*
+			openFeed takes feed object and opens in new VF page for display of items.
+    	*/
+    	$scope.openFeed = function(feedIndex) {
+    		var feed = $scope.feeds[feedIndex];
+    		sforce.console.getEnclosingPrimaryTabId(function(primaryTab) {
+    			sforce.console.openSubtab(primaryTab.id, '/apex/DF14_rssfeedDetailPage?id='+feed.Id, true, feed.Name, null, function(result) {
+    				feed.subtabId = result.id;
+    			});
+    		});
+    	}
+	}]);
+
+	/*
+		Factory for getting the RSSFeed__c objects from SFDC 
+	*/
+	App.factory('SFDCFeedService', ['$rootScope','$q',function($rootScope, $q) {
+		return {
+			getFeeds : function() {
+				var deferred = $q.defer();
+				Visualforce.remoting.Manager.invokeAction(
+					'{!$RemoteAction.RSSFeedController.getFeeds}',
+					function(result, event) {
+						$rootScope.$apply(function() {
+							if(event.status) {
+								deferred.resolve(result);
+							} else {
+								deferred.reject(event);
+							}
+						});
+					},{buffer:true, escape: false,timeout:30000}
+				);
+				return deferred.promise;
+			}
+		}
+	}]);
+
+	/*
+		Factory for reading the RSS feed.
+	*/
+	App.factory('FeedService',['$http',function($http){
+    	return {
+        	parseFeed : function(url){
+            
+            	return $http.jsonp('//ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=50&callback=JSON_CALLBACK&q=' + encodeURIComponent(url));
+        	}
+    	}
+	}]);	
+</script>
+<!--
+	Feeds to show
+	http://techcrunch.com/rssfeeds/
+	http://www.wired.com/about/rss_feeds/
+	http://www.zdnet.com/rssfeeds/
+	http://www.cnet.com/rss/
+	http://www.bbc.com/news/technology/
+-->
+<div class="container-fluid" data-ng-app="RSSFeedApp" ng-controller="FeedCtrl">
+	<div >
+    	<input class="feedInput" type="text" data-ng-model="newUrl" placeholder="Enter Feed URL"/>
+    	<button class="btn btn-info" type="button" tabindex="-1" data-ng-click="addFeed(newUrl)">Add Feed</button>
+   	</div>
+   	<div class="feedList">
+   		<ul>
+   			<li data-sf-id="{{feed.Id}}" data-ng-repeat="feed in feeds track by $index">
+   				<div class="removeLink" data-ng-click="removeFeed($index)"><apex:image value="{!$Resource.removeIco}" height="90%"/></div>
+   				<div class="feedLink" data-ng-click="openFeed($index)">{{feed.Name}}</div>
+   			</li>
+   		</ul>
+   	</div>
+</div>
+  	
+
+</apex:page>

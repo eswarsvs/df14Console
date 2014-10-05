@@ -1,0 +1,101 @@
+<apex:page showHeader="false" standardStylesheets="true" standardController="RSSFeed__c">
+<style type="text/css">
+.container {
+	background-color: #FFFFFF;
+	margin-left: 15px;
+}
+.feedTitle {
+	font-size: 22px;
+	font-weight: bold;
+	margin-top:15px;
+	color: #015ba7;
+}	
+.feedDescription {
+	margin-top: 15px;
+	font-size: 14px;
+	font-weight: bold;
+	color: grey;
+	padding-left: 15px;
+}
+.feedEntries {
+	padding-left: 15px;
+	margin-right: 15px;
+}
+.feedEntry {
+	list-style: none;
+	margin: 0px;
+	margin-bottom: 10px;
+	border: 1px solid rgb(231,231,231);
+	padding: 5px;
+	border-radius: 5px;
+}
+.feedEntry a {
+	text-decoration: none;
+}
+.feedEntry a:hover {
+	text-decoration: underline;
+}
+.entryTitle {
+	font-size: 14px;
+	padding-bottom: 5px;
+	font-weight: bold;
+}
+.entryTitle a {
+	color: #015ba7;
+}
+.entryTitle a:hover {
+	text-decoration:underline;
+}
+.entrySnippet {
+	padding-left: 5px;
+	padding-bottom: 5px;
+	font-size: 14px;
+}
+.entryPublishDate {
+	padding-left: 5px;
+	font-size: 10px;
+	color: grey;
+}
+</style>
+<apex:stylesheet value="//cdn.jsdelivr.net/webjars/bootstrap-sf1/0.1.0-beta.6/css/bootstrap-namespaced.css"/>
+<apex:includeScript value="//ajax.googleapis.com/ajax/libs/angularjs/1.3.0-beta.11/angular.min.js"/>
+<apex:includeScript value="//ajax.googleapis.com/ajax/libs/angularjs/1.3.0-beta.11/angular-sanitize.min.js"/>
+
+<script type="text/javascript">
+
+	var feedDetailApp = angular.module('RSSFeedDetail', []);
+
+	feedDetailApp.controller('FeedDetailCtrl', ['$scope','$http','FeedService', function($scope, $http, FeedService) {
+
+		FeedService.parseFeed('{!rssFeed__c.Feed_URL__c}').then(function(result) {
+			$scope.feed = result.data.responseData.feed;
+			console.log(JSON.stringify(result));
+		});
+
+	}]);
+
+	/*
+		Factory for reading the RSS feed.
+	*/
+	feedDetailApp.factory('FeedService',['$http',function($http){
+    	return {
+        	parseFeed : function(url){
+            
+            	return $http.jsonp('//ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=50&callback=JSON_CALLBACK&q=' + encodeURIComponent(url));
+        	}
+    	}
+	}]);	
+</script>
+
+<div class="container" data-ng-app="RSSFeedDetail" ng-controller="FeedDetailCtrl">
+	<div class="feedTitle">{{feed.title}}</div>
+	<div class="feedDescription">{{feed.description}}</div>
+	<ul class="feedEntries"	>
+		<li class="feedEntry" data-ng-repeat="entry in feed.entries track by $index">
+			<div class="entryTitle"><a href="{{entry.link}}" target="_blank">{{entry.title}}</a></div>
+			<div class="entrySnippet">{{entry.contentSnippet}}</div>
+			<div class="entryPublishDate">{{entry.publishedDate | date:'medium'}}</div>
+		</li>
+	</ul>
+</div>
+</apex:page>
